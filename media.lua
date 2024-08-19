@@ -1,4 +1,5 @@
--- Launcher for the media software
+-- Launcher and installer for the media software
+-- Has to be regularly updated over on https://pastebin.com/UQ025xVy
 
 -- Paths
 local paths = {}
@@ -10,6 +11,13 @@ paths.drive = "hdd"
 paths.program = fs.combine(paths.folders.install, "program.lua")
 paths.library = fs.combine(paths.folders.install, "library.lua")
 paths.jsonlib = fs.combine(paths.folders.install, "lib", "json.lua")
+paths.combine = function(...)
+    local result = ""
+    for i, a in ipairs(arg) do
+        result = result .. "/" .. a
+    end
+    return result
+end
 
 -- Utility
 local function install(path, link)
@@ -33,7 +41,7 @@ local f = fs.open(fs.combine(paths.folders.localSongs, "PUT FILES HERE.txt"), 'w
 f.close()
 
 -- Install libraries
-if not (fs.exists(".devenv") or fs.exists(path.combine(paths.folders.install, ".devenv"))) then
+if not (fs.exists(".devenv") or fs.exists(paths.combine(paths.folders.install, ".devenv"))) then
     install(paths.program, "https://raw.githubusercontent.com/FlooferLand/cc-media/main/media/program.lua")
     install(paths.library, "https://raw.githubusercontent.com/FlooferLand/cc-media/main/media/library.lua")
 else
@@ -42,7 +50,7 @@ end
 install(paths.jsonlib, "https://gist.githubusercontent.com/tylerneylon/59f4bcf316be525b30ab/raw/7f69cc2cea38bf68298ed3dbfc39d197d53c80de/json.lua")
 
 -- Running the program
-if not (fs.exists(".owner") or fs.exists(path.combine(paths.folders.install, ".owner"))) then
+if not (fs.exists(".owner") or fs.exists(paths.combine(paths.folders.install, ".owner"))) then
     print("Running cc-media (by FlooferLand)")
     sleep(0.8)
 end
