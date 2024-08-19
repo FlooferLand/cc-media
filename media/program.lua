@@ -239,19 +239,13 @@ currentError = config:load()
 MediaApp.start()
 ui.loadBuiltinTheme(ui.themes.steampunk)
 print("Starting..")
-local stopProgram = function ()
-    state.running = false
-    MediaApp.stop()
-    config:save()
-    ui.unloadTheme()
-end
-while state.running do
-    local function eventHandler()
+local function eventHandler()
+    while state.running do
         local event, data1, data2 = os.pullEventRaw()
         if event == "key" then
             local key, isHeld = data1, data2
             if event == "terminate" or key == keys.esc or key == keys.rightShift or key == keys.rightCtrl then
-                stopProgram()
+                state.running = false
                 return
             end
             MediaApp.input(key, isHeld)
@@ -263,14 +257,12 @@ while state.running do
             MediaApp.http(false, url, handle)
         end
     end
-    local function updateHandler()
-        if not state.running then
-            return
-        end
+end
+local function updateHandler()
+    while state.running do
+        local deltaStart = os.time()
+
         MediaApp.update()
-        sleep(0.0001)
-    end
-    local function uiHandler()
         for _, monitor in pairs(monitors) do
             monitor.setBackgroundColor(ui.colors.back.clear)
             monitor.setTextColor(ui.colors.front.text)
@@ -278,16 +270,21 @@ while state.running do
             monitor.setCursorPos(2,2)
             MediaApp.ui(monitor)
         end
-        sleep(0.0001)
-    end
 
-    -- running and calculating delta time
-    local deltaStart = os.time()
-    parallel.waitForAny(eventHandler, uiHandler) -- TODO: add updateHandler back
-    sleep(time.perSecond)
-    local deltaDiff = (os.time() - deltaStart)
-    time.delta = deltaDiff >= 0 and deltaDiff or 0
+        -- Waiting between frames and calculating delta time
+        sleep(time.perSecond)  -- FIXME: Sleep rounds up any number to 0.15
+        local deltaDiff = (os.time() - deltaStart)
+        time.delta = deltaDiff >= 0 and deltaDiff or 0
+    end
 end
+
+-- Running the main loop
+parallel.waitForAny(eventHandler, updateHandler, uiHandler)
+
+-- Exiting and cleaning up after the program
+MediaApp.stop()
+config:save()
+ui.unloadTheme()  -- Resets the colour palette
 for i, monitor in pairs(monitors) do
     monitor.setBackgroundColor(colors.black)
     monitor.setTextColor(colors.white)
