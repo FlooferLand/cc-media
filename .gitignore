@@ -1,3 +1,10 @@
+# Custom
+/media/conf.json
+/media/config.json
+/media/lib/*
+/media/songs/*
+.devenv
+
 # Compiled Lua sources
 luac.out
 

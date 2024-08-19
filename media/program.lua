@@ -1,5 +1,6 @@
 local lib = require "library"
-local json = require "json"
+local api = lib.api
+local hexColors = lib.color
 
 -- Getting the peripherals
 local monitors = { term, peripheral.find("monitor") }
@@ -14,37 +15,20 @@ local state = {
     running = true,
     searchString = ""
 }
-local cursor = 0  --- @type integer
-local currentVideo = nil  --- @type table?
+local cursor = {
+    x = 0,  --- @type integer
+    y = 0   --- @type integer
+}
+local currentVideo  = nil  --- @type table?
 local currentSearch = nil  --- @type table?
-local currentError = nil  --- @type string?
-local currentInfo = nil  --- @type string?
+local currentError  = nil  --- @type string?
+local currentInfo   = nil  --- @type string?
 
 --- Timey wimey stuff
 local time = {}
 time.framerate = 60
 time.perSecond = (1 / time.framerate)
 time.delta = time.perSecond
-
---- The Invidious YouTube API
-local api = {}
-api.base = "https://inv.nadeko.net/api/v1/"   -- TODO: Allow several API backends, use backup instances in case a request to one of them fails
-api.search_video = function (searchString)
-    local url = api.base .. "search?q=" .. textutils.urlEncode(searchString)
-    local req = http.get({ url = url, binary = false })
-    local data = json.parse(req.readAll())
-    req.close()
-    if data ~= nil and type(data) == "table" then 
-        currentSearch = data
-    else
-        currentError = "Received search result data is invalid.\nNot a table, or nil"
-    end
-end
-api.fetch_video = function (hash)
-    local url = api.base .. "videos/" .. hash
-    http.request({ url = url, binary = false })
-    debug.requested_url = url
-end
 
 local ui = {
     colors = {
@@ -74,22 +58,22 @@ local ui = {
     }
 }
 ui.page = ui.pages.search
-ui.unloadTheme = function ()
+ui.unloadTheme = function()
     for name, color in pairs(colors) do
-        if type(color) == "number" and lib.color[name] ~= nil then
+        if type(color) == "number" and hexColors[name] ~= nil then
             for _, monitor in pairs(monitors) do
-                monitor.setPaletteColor(color, lib.color[name])
+                monitor.setPaletteColor(color, hexColors[name])
             end
         end
     end
 end
-ui.loadBuiltinTheme = function (theme)
+ui.loadBuiltinTheme = function(theme)
     ui.unloadTheme()
     if theme == ui.themes.generic then
         for _, monitor in pairs(monitors) do
-            monitor.setPaletteColor(colors.cyan, lib.color.blend(lib.color.cyan, lib.color.black))
-            monitor.setPaletteColor(colors.gray, lib.color.blend(lib.color.gray, lib.color.black))
-            monitor.setPaletteColor(colors.pink, lib.color.blend(lib.color.black, lib.color.brown, 0.3))
+            monitor.setPaletteColor(colors.cyan, hexColors.blend(hexColors.cyan, hexColors.black))
+            monitor.setPaletteColor(colors.gray, hexColors.blend(hexColors.gray, hexColors.black))
+            monitor.setPaletteColor(colors.pink, hexColors.blend(hexColors.black, hexColors.brown, 0.3))
         end
         ui.colors = {
             front = {
@@ -106,11 +90,11 @@ ui.loadBuiltinTheme = function (theme)
         }
     elseif theme == ui.themes.steampunk then
         for i, monitor in pairs(monitors) do
-            monitor.setPaletteColor(colors.white, lib.color.blend(lib.color.white, lib.color.brown))
-            monitor.setPaletteColor(colors.red, lib.color.blend(lib.color.red, lib.color.brown))
-            monitor.setPaletteColor(colors.gray, lib.color.blend(lib.color.gray, lib.color.brown))
-            monitor.setPaletteColor(colors.black, lib.color.blend(lib.color.black, lib.color.brown))
-            monitor.setPaletteColor(colors.pink, lib.color.blend(lib.color.black, lib.color.brown, 0.3))
+            monitor.setPaletteColor(colors.white, hexColors.blend(hexColors.white, hexColors.brown))
+            monitor.setPaletteColor(colors.red, hexColors.blend(hexColors.red, hexColors.brown))
+            monitor.setPaletteColor(colors.gray, hexColors.blend(hexColors.gray, hexColors.brown))
+            monitor.setPaletteColor(colors.black, hexColors.blend(hexColors.black, hexColors.brown))
+            monitor.setPaletteColor(colors.pink, hexColors.blend(hexColors.black, hexColors.brown, 0.3))
         end
         ui.colors = {
             front = {
@@ -128,7 +112,17 @@ ui.loadBuiltinTheme = function (theme)
     end
 end
 
-local debug = {}
+local tabs = {
+    { ui.pages.home, "Home" },
+    { ui.pages.search, "Search" },
+    { ui.pages.watch, "Watch" },
+    { ui.pages.settings, "Settings" }
+}
+
+local clicked = false  --- Whenever enter was pressed this frame
+
+local debug = {}  --- Used for passing stuff between draw and update while testing
+
 
 -- Main module
 local MediaApp = {
@@ -141,6 +135,20 @@ local MediaApp = {
     --- @param key integer
     --- @param isHeld boolean
     input = function(key, isHeld)
+        -- Cursor movement
+        cursor.x = cursor.x - ((key == keys.left and cursor.x > 0) and 1 or 0)
+        cursor.x = cursor.x + ((key == keys.right) and 1 or 0)
+        cursor.y = cursor.y - ((key == keys.up and cursor.y > 0) and 1 or 0)
+        cursor.y = cursor.y + ((key == keys.down) and 1 or 0)
+
+        clicked = (key == keys.enter)
+
+        -- Tabs
+        if (key == keys.enter) and cursor.x > 0 and cursor.x < #tabs and cursor.y == 0 then
+            ui.page = tabs[cursor.x][0]
+        end
+
+        -- Closing the error screen on any key
         if currentError ~= nil then
             currentError = nil
         end
@@ -161,26 +169,37 @@ local MediaApp = {
     end,
 
     --- @param monitor any
-    draw = function(monitor)
+    ui = function(monitor)
         local width, height = monitor.getSize()
 
-        -- Always visible
-        local tabs = {
-            { ui.pages.home, "Home" },
-            { ui.pages.search, "Search" },
-            { ui.pages.watch, "Watch" },
-            { ui.pages.settings, "Settings" }
-        }
+        -- Always visible (top)
+        if cursor.x > #tabs and cursor.y == 0 then
+            cursor.y = 1
+        end 
         for i, tab in pairs(tabs) do
-            monitor.setBackgroundColor(page == tab[1] and ui.colors.back.primary or ui.colors.back.secondary)
-            monitor.write(tab[2])
+            local active = (ui.page == tab[1])
+            local selected = (cursor.x == i and cursor.y == 0)
+            monitor.setBackgroundColor(active and ui.colors.back.primary or ui.colors.back.secondary)
+            monitor.setTextColor(selected and (clicked and ui.colors.front.primary or ui.colors.front.secondary) or ui.colors.front.text)
+            monitor.write((selected and "(" or "") .. tab[2] .. (selected and ")" or ""))
             monitor.setBackgroundColor(ui.colors.back.clear)
+            monitor.setTextColor(ui.colors.front.text)
             monitor.write(" ")
         end
 
+        -- Always visible (bottom)
+        monitor.setCursorPos(1, height)
+        monitor.write(("(".. cursor.x .. ", " .. cursor.y ..")") .. " | " .. (currentInfo ~= nil and currentInfo or "empty") .. " | " .. (math.random(0, 9)))
+
         -- Page-specific
         if ui.page == ui.pages.search then
-            -- TODO: Render search
+            monitor.setBackgroundColor(ui.colors.back.secondary)
+            local y = height * 0.12
+            for x = width * 0.2, width * 0.8, 1 do
+                monitor.setCursorPos(x, y)
+                monitor.write("_")
+            end
+            monitor.setBackgroundColor(ui.colors.back.clear)
         end
 
         -- Always on top
@@ -213,6 +232,7 @@ local MediaApp = {
         -- TODO: Use https://tweaked.cc/module/paintutils.html to draw videos
     end
 }
+
 
 -- Main loop
 currentError = config:load()
@@ -248,23 +268,23 @@ while state.running do
             return
         end
         MediaApp.update()
-        sleep(time.perSecond)
+        sleep(0.0001)
     end
-    local function drawHandler()
-        for i, monitor in pairs(monitors) do
+    local function uiHandler()
+        for _, monitor in pairs(monitors) do
             monitor.setBackgroundColor(ui.colors.back.clear)
             monitor.setTextColor(ui.colors.front.text)
             monitor.clear()
             monitor.setCursorPos(2,2)
-            MediaApp.draw(monitor)
+            MediaApp.ui(monitor)
         end
-        sleep(time.perSecond)
+        sleep(0.0001)
     end
 
-    -- state.running and calculating delta time
+    -- running and calculating delta time
     local deltaStart = os.time()
-    parallel.waitForAny(eventHandler, updateHandler)
-    drawHandler()
+    parallel.waitForAny(eventHandler, uiHandler) -- TODO: add updateHandler back
+    sleep(time.perSecond)
     local deltaDiff = (os.time() - deltaStart)
     time.delta = deltaDiff >= 0 and deltaDiff or 0
 end

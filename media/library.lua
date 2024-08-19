@@ -1,4 +1,5 @@
-local json = require "json"
+local json = require "lib.json"
+
 --- Copy a table
 local function deepcopy(orig)
     local orig_type = type(orig)
@@ -123,8 +124,29 @@ function config.save(self)
     file.close()
 end
 
+--- The Invidious YouTube API
+local api = {}
+api.base = "https://inv.nadeko.net/api/v1/"   -- TODO: Allow several API backends, use backup instances in case a request to one of them fails
+api.search_video = function (searchString)
+    local url = api.base .. "search?q=" .. textutils.urlEncode(searchString)
+    local req = http.get({ url = url, binary = false })
+    local data = json.parse(req.readAll())
+    req.close()
+    if data ~= nil and type(data) == "table" then 
+        currentSearch = data
+    else
+        currentError = "Received search result data is invalid.\nNot a table, or nil"
+    end
+end
+api.fetch_video = function (hash)
+    local url = api.base .. "videos/" .. hash
+    http.request({ url = url, binary = false })
+    debug.requested_url = url
+end
+
 -- Export
 return {
+    api = api,
     config = config,
     color = color,
     extraMath = extraMath,
