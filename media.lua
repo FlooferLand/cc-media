@@ -33,7 +33,7 @@ local f = fs.open(fs.combine(paths.folders.localSongs, "PUT FILES HERE.txt"), 'w
 f.close()
 
 -- Install libraries
-if not fs.exists(".devenv") then
+if not (fs.exists(".devenv") or fs.exists(path.combine(paths.folders.install, ".devenv"))) then
     install(paths.program, "https://raw.githubusercontent.com/FlooferLand/cc-media/main/media/program.lua")
     install(paths.library, "https://raw.githubusercontent.com/FlooferLand/cc-media/main/media/library.lua")
 else
@@ -42,5 +42,9 @@ end
 install(paths.jsonlib, "https://gist.githubusercontent.com/tylerneylon/59f4bcf316be525b30ab/raw/7f69cc2cea38bf68298ed3dbfc39d197d53c80de/json.lua")
 
 -- Running the program
+if not (fs.exists(".owner") or fs.exists(path.combine(paths.folders.install, ".owner"))) then
+    print("Running cc-media (by FlooferLand)")
+    sleep(0.8)
+end
 shell.run(paths.program)
 

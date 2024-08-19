@@ -23,6 +23,65 @@ local extraMath = {
     end
 }
 
+-- Config stuff
+local config = {
+    --- @type string
+    path = "",
+
+    data = {
+        theme = "generic",
+        monitors = {
+            --- @type string[]
+            browser = {},
+
+            --- @type string[]
+            displayer = {}
+        },
+        speakers = {
+            --- @type string[]
+            browser = {},
+
+            --- @type string[]
+            displayer = {}
+        }
+    }
+}
+
+--- Config constructor
+---@param path string
+function config.make(path)
+    local copy = deepcopy(config)
+    copy.path = path
+    return copy
+end
+
+--- Loads from a path
+--- @return nil|string
+function config.load(self)
+    if not fs.exists(self.path) then
+        local file = fs.open(self.path, "w")
+        file.write(json.stringify(config.data))
+        file.close()
+    end
+
+    local file = fs.open(self.path, "r")
+    local config = json.parse(file.readAll()) or config.data
+    file.close()
+    if type(config) == "table" then
+        self.data = config
+        return nil
+    else
+        return "Error: Config file at path \""..self.path.."\" is not a JSON object!"
+    end
+end
+
+--- Saves to a path
+function config.save(self)
+    local file = fs.open(self.path, "w")
+    file.write(json.stringify(self.data))
+    file.close()
+end
+
 -- Colour magic
 local color = {
     white = 0xF0F0F0,
@@ -66,87 +125,8 @@ local color = {
     end
 }
 
--- Config stuff
-local config = {
-    --- @type string
-    path = "",
-
-    data = {
-        monitors = {
-            --- @type string[]
-            browser = {},
-
-            --- @type string[]
-            displayer = {}
-        },
-        speakers = {
-            --- @type string[]
-            browser = {},
-
-            --- @type string[]
-            displayer = {}
-        }
-    }
-};
-
---- Constructor
----@param path string
-function config.make(path)
-    local copy = deepcopy(config)
-    copy.path = path
-    return copy
-end
-
---- Loads from a path
---- @return nil|string
-function config.load(self)
-    if not fs.exists(self.path) then
-        local file = fs.open(self.path, "w")
-        file.write(json.stringify(config.data))
-        file.close()
-    end
-
-    local file = fs.open(self.path, "r")
-    local config = json.parse(file.readAll()) or config.data
-    file.close()
-    if type(config) == "table" then
-        self.data = config
-        return nil
-    else
-        return "Error: Config file at path \""..self.path.."\" is not a JSON object!"
-    end
-end
-
---- Saves to a path
-function config.save(self)
-    local file = fs.open(self.path, "w")
-    file.write(json.stringify(self.data))
-    file.close()
-end
-
---- The Invidious YouTube API
-local api = {}
-api.base = "https://inv.nadeko.net/api/v1/"   -- TODO: Allow several API backends, use backup instances in case a request to one of them fails
-api.search_video = function (searchString)
-    local url = api.base .. "search?q=" .. textutils.urlEncode(searchString)
-    local req = http.get({ url = url, binary = false })
-    local data = json.parse(req.readAll())
-    req.close()
-    if data ~= nil and type(data) == "table" then 
-        currentSearch = data
-    else
-        currentError = "Received search result data is invalid.\nNot a table, or nil"
-    end
-end
-api.fetch_video = function (hash)
-    local url = api.base .. "videos/" .. hash
-    http.request({ url = url, binary = false })
-    debug.requested_url = url
-end
-
 -- Export
 return {
-    api = api,
     config = config,
     color = color,
     extraMath = extraMath,
